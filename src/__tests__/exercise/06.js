@@ -4,7 +4,23 @@
 import * as React from 'react'
 import {render, screen, act} from '@testing-library/react'
 import Location from '../../examples/location'
+import {useCurrentPosition} from 'react-use-geolocation';
 
+let setMockPosition
+function useMockCurrentPosition() {
+  const state = React.useState([])
+
+  setMockPosition = state[1]
+  return state[0]
+}
+
+jest.mock('react-use-geolocation')
+
+beforeAll(() => {
+  window.navigator.geolocation = {
+    getCurrentPosition: jest.fn(),
+  }
+})
 // 🐨 set window.navigator.geolocation to an object that has a getCurrentPosition mock function
 
 // 💰 I'm going to give you this handy utility function
@@ -28,8 +44,15 @@ function deferred() {
 test('displays the users current location', async () => {
   // 🐨 create a fakePosition object that has an object called "coords" with latitude and longitude
   // 📜 https://developer.mozilla.org/en-US/docs/Web/API/GeolocationPosition
+  const fakePosition = {
+    coords: {
+      latitude: 123,
+      longitude: 456,
+    },
+  }
   //
   // 🐨 create a deferred promise here
+  const {promise, resolve, reject} = deferred()
   //
   // 🐨 Now we need to mock the geolocation's getCurrentPosition function
   // To mock something you need to know its API and simulate that in your mock:
@@ -43,18 +66,38 @@ test('displays the users current location', async () => {
   // 🐨 so call mockImplementation on getCurrentPosition
   // 🐨 the first argument of your mock should accept a callback
   // 🐨 you'll call the callback when the deferred promise resolves
-  // 💰 promise.then(() => {/* call the callback with the fake position */})
+  // navigator.geolocation.getCurrentPosition.mockImplementation(
+  //   (success, error) => {
+  //     promise.then(() => {
+  //       success(fakePosition)
+  //     })
+  //   },
+  // )
   //
+
+  useCurrentPosition.mockImplementation(useMockCurrentPosition)
   // 🐨 now that setup is done, render the Location component itself
+  render(<Location />)
   //
   // 🐨 verify the loading spinner is showing up
   // 💰 tip: try running screen.debug() to know what the DOM looks like at this point.
-  //
+  expect(screen.getByLabelText(/loading/i)).toMatchInlineSnapshot(`
+    <div
+      aria-label="loading..."
+      class="lds-ripple"
+    >
+      <div />
+      <div />
+    </div>
+  `)
   // 🐨 resolve the deferred promise
+
   // 🐨 wait for the promise to resolve
   // 💰 right around here, you'll probably notice you get an error log in the
   // test output. You can ignore that for now and just add this next line:
-  // act(() => {})
+  act(() => {
+    setMockPosition([fakePosition])
+  })
   //
   // If you'd like, learn about what this means and see if you can figure out
   // how to make the warning go away (tip, you'll need to use async act)
@@ -62,7 +105,39 @@ test('displays the users current location', async () => {
   //
   // 🐨 verify the loading spinner is no longer in the document
   //    (💰 use queryByLabelText instead of getByLabelText)
+  expect(screen.queryByLabelText(/loading/i)).not.toBeInTheDocument()
   // 🐨 verify the latitude and longitude appear correctly
+  expect(screen.getByText(/latitude/i)).toHaveTextContent(`Latitude: ${fakePosition.coords.latitude}`)
+  expect(screen.getByText(/longitude/i)).toHaveTextContent(`Longitude: ${fakePosition.coords.longitude}`)
+})
+
+test('alerts that the location cannot be determinated', async () => {
+  const error = new Error('something went wrong')
+  const fakePosition = {
+    coords: {
+      latitude: 123,
+      longitude: 456,
+    },
+  }
+  useCurrentPosition.mockImplementation(useMockCurrentPosition)
+  render(<Location />)
+  expect(screen.getByLabelText(/loading/i)).toMatchInlineSnapshot(`
+    <div
+      aria-label="loading..."
+      class="lds-ripple"
+    >
+      <div />
+      <div />
+    </div>
+  `)
+  act(() => {
+    setMockPosition([null, error])
+  })
+
+  expect(screen.queryByLabelText(/loading/i)).not.toBeInTheDocument()
+  expect(screen.queryByDisplayValue(/latitude/i)).not.toBeInTheDocument()
+  expect(screen.queryByDisplayValue(/longitude/i)).not.toBeInTheDocument()
+  expect(screen.getByRole(/alert/i)).toHaveTextContent(error.message)
 })
 
 /*
